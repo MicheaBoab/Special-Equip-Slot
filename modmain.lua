@@ -27,6 +27,9 @@ local CHAR_ITEMS_BY_CHARACTER = {
         "dumbbell_redgem",
         "dumbbell_bluegem"
     },
+    waxwell = {
+        "waxwelljournal",
+    },
 }
 
 -- Flat list and lookup set (built from the mapping)
@@ -103,9 +106,10 @@ end)
 for _, prefab in ipairs(CHAR_ITEMS) do
     AddPrefabPostInit(prefab, function(inst)
         if not GLOBAL.TheWorld.ismastersim then return end
-        if inst.components.equippable ~= nil then
-            inst.components.equippable.equipslot = GLOBAL.EQUIPSLOTS.CHAR
+        if inst.components.equippable == nil then
+            inst:AddComponent("equippable")
         end
+        inst.components.equippable.equipslot = GLOBAL.EQUIPSLOTS.CHAR
     end)
 end
 
@@ -234,6 +238,19 @@ GLOBAL.TheInput:AddKeyDownHandler(KEY_Z, function()
     end
     local item = player.replica.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
     if item == nil then return end
+
+    -- Spellbook (waxwelljournal): toggle spell wheel UI only; AOE targeting/casting uses default game controls.
+    if item.components.spellbook ~= nil then
+        local hud = player.HUD
+        if hud ~= nil then
+            if hud:GetCurrentOpenSpellBook() == item then
+                hud:CloseSpellWheel()
+            elseif item.components.spellbook:CanBeUsedBy(player) then
+                item.components.spellbook:OpenSpellBook(player)
+            end
+        end
+        return
+    end
 
     -- Shield: instant block (CASTAOE)
     if item.components.aoetargeting ~= nil and item.components.aoetargeting:IsEnabled() then
