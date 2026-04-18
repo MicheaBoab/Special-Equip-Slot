@@ -118,6 +118,17 @@ AddPrefabPostInit("wathgrithr_shield", function(inst)
     if not GLOBAL.TheWorld.ismastersim then return end
 
     inst:DoTaskInTime(0, function(inst)
+        if inst.components.aoespell ~= nil and inst.components.aoespell.spellfn ~= nil then
+            local _spellfn = inst.components.aoespell.spellfn
+            inst.components.aoespell:SetSpellFn(function(inst, doer, pos)
+                local ok = _spellfn(inst, doer, pos)
+                if doer ~= nil and doer:IsValid() then
+                    doer:PushEvent("charslot_shield_parry_start", { shield = inst })
+                end
+                return ok
+            end)
+        end
+
         if inst.components.parryweapon == nil then return end
 
         local _onparryfn = inst.components.parryweapon.onparryfn
@@ -245,40 +256,154 @@ end)
 
 ---------------------------------------------------------------------------
 -- Visual priority: HANDS item always shown. If HANDS is empty, show CHAR
--- item visuals instead. Re-apply on every equip/unequip of either slot.
+-- item visuals instead.
+-- This mod runs on server side; use server inventory state as source of truth.
+-- Re-apply twice (0 frame and 1 frame) to avoid late onequip override order.
 ---------------------------------------------------------------------------
-local function ApplyVisuals(inst)
-    if inst.components.inventory == nil then return end
-    local handsitem = inst.components.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.HANDS)
-    local charitem  = inst.components.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
+local QueueApplyVisuals
 
-    -- First, undo any CHAR-slot visual overrides
-    if charitem ~= nil and charitem.components.equippable ~= nil then
-        local unfn = charitem.components.equippable.onunequipfn
-        if unfn then unfn(charitem, inst) end
+local function StopShieldParryVisual(inst)
+    if inst._charslot_force_shield_task ~= nil then
+        inst._charslot_force_shield_task:Cancel()
+        inst._charslot_force_shield_task = nil
     end
-
-    if handsitem ~= nil and handsitem.components.equippable ~= nil then
-        -- HANDS has something — show its visuals (re-fire onequipfn)
-        local fn = handsitem.components.equippable.onequipfn
-        if fn then fn(handsitem, inst) end
-    elseif charitem ~= nil and charitem.components.equippable ~= nil then
-        -- HANDS empty — fall back to showing CHAR item visuals
-        local fn = charitem.components.equippable.onequipfn
-        if fn then fn(charitem, inst) end
+    inst._charslot_force_shield = nil
+    if QueueApplyVisuals ~= nil then
+        QueueApplyVisuals(inst)
     end
 end
 
+local function StartShieldParryVisual(inst, shield)
+    if inst == nil or not inst:IsValid() or shield == nil or not shield:IsValid() then
+        return
+    end
+
+    local inventory = inst.components.inventory
+    if inventory == nil then return end
+
+    if inst.prefab ~= "wathgrithr" then return end
+
+    if inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR) ~= shield then return end
+
+    inst._charslot_force_shield = shield
+
+    if inst._charslot_force_shield_task ~= nil then
+        inst._charslot_force_shield_task:Cancel()
+        inst._charslot_force_shield_task = nil
+    end
+
+    -- Show shield visuals immediately
+    if shield.components.equippable ~= nil then
+        local fn = shield.components.equippable.onequipfn
+        if fn then fn(shield, inst) end
+    end
+
+    -- Poll every frame until the "parrying" stategraph tag disappears.
+    -- Covers all three ways parry can end:
+    --   1. Timer runs out naturally
+    --   2. Player moves before timer (parry cancelled)
+    --   3. Successful parry hit (parry_hit short stun → idle)
+    local function CheckParryEnd(inst)
+        inst._charslot_force_shield_task = nil
+        if inst._charslot_force_shield == nil then return end
+        if inst.sg ~= nil and inst.sg:HasStateTag("parrying") then
+            -- Still parrying: check again next frame
+            inst._charslot_force_shield_task = inst:DoTaskInTime(GLOBAL.FRAMES, CheckParryEnd)
+        else
+            -- Parry ended: restore normal hand/char priority visuals immediately
+            StopShieldParryVisual(inst)
+        end
+    end
+
+    -- Wait a few frames for stategraph to enter parry_pre and set the "parrying" tag
+    inst._charslot_force_shield_task = inst:DoTaskInTime(4 * GLOBAL.FRAMES, CheckParryEnd)
+end
+
+local function ApplyVisuals(inst)
+    local inventory = inst.components.inventory
+    if inventory == nil then return end
+    local handsitem = inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.HANDS)
+    local charitem  = inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
+
+    if inst._charslot_force_shield ~= nil and inst._charslot_force_shield:IsValid() then
+        if charitem == inst._charslot_force_shield and charitem.components.equippable ~= nil then
+            local forcefn = charitem.components.equippable.onequipfn
+            if forcefn then forcefn(charitem, inst) end
+            return
+        else
+            inst._charslot_force_shield = nil
+        end
+    end
+
+    if handsitem ~= nil and handsitem.components.equippable ~= nil then
+        -- HAND has something -> CHAR visuals must be removed first.
+        if charitem ~= nil and charitem.components.equippable ~= nil then
+            local unfn = charitem.components.equippable.onunequipfn
+            if unfn then unfn(charitem, inst) end
+        end
+
+        -- Then (re)apply hand visuals when available.
+        local handsfn = handsitem.components.equippable.onequipfn
+        if handsfn then handsfn(handsitem, inst) end
+    elseif charitem ~= nil and charitem.components.equippable ~= nil then
+        -- HAND is empty → fall back to CHAR item visuals
+        local charfn = charitem.components.equippable.onequipfn
+        if charfn then charfn(charitem, inst) end
+    end
+end
+
+QueueApplyVisuals = function(inst)
+    if inst._charslot_visual_task0 ~= nil then
+        inst._charslot_visual_task0:Cancel()
+    end
+    if inst._charslot_visual_task1 ~= nil then
+        inst._charslot_visual_task1:Cancel()
+    end
+
+    inst._charslot_visual_task0 = inst:DoTaskInTime(0, function(inst)
+        inst._charslot_visual_task0 = nil
+        ApplyVisuals(inst)
+    end)
+    inst._charslot_visual_task1 = inst:DoTaskInTime(GLOBAL.FRAMES, function(inst)
+        inst._charslot_visual_task1 = nil
+        ApplyVisuals(inst)
+    end)
+end
+
 AddPlayerPostInit(function(inst)
-    inst:ListenForEvent("equip", function(inst, data)
-        if data.eslot == GLOBAL.EQUIPSLOTS.HANDS or data.eslot == GLOBAL.EQUIPSLOTS.CHAR then
-            inst:DoTaskInTime(0, ApplyVisuals)
+    if not GLOBAL.TheWorld.ismastersim then
+        return
+    end
+
+    inst:ListenForEvent("charslot_shield_parry_start", function(inst, data)
+        if data ~= nil and data.shield ~= nil then
+            StartShieldParryVisual(inst, data.shield)
         end
     end)
-    inst:ListenForEvent("unequip", function(inst, data)
-        if data.eslot == GLOBAL.EQUIPSLOTS.HANDS or data.eslot == GLOBAL.EQUIPSLOTS.CHAR then
-            inst:DoTaskInTime(0, ApplyVisuals)
+
+    local function OnEquipChanged(inst, data)
+        if data ~= nil and (data.eslot == GLOBAL.EQUIPSLOTS.HANDS or data.eslot == GLOBAL.EQUIPSLOTS.CHAR) then
+            QueueApplyVisuals(inst)
         end
+    end
+
+    inst:ListenForEvent("equip", OnEquipChanged)
+    inst:ListenForEvent("unequip", OnEquipChanged)
+
+    inst:ListenForEvent("onremove", function(inst)
+        if inst._charslot_visual_task0 ~= nil then
+            inst._charslot_visual_task0:Cancel()
+            inst._charslot_visual_task0 = nil
+        end
+        if inst._charslot_visual_task1 ~= nil then
+            inst._charslot_visual_task1:Cancel()
+            inst._charslot_visual_task1 = nil
+        end
+        if inst._charslot_force_shield_task ~= nil then
+            inst._charslot_force_shield_task:Cancel()
+            inst._charslot_force_shield_task = nil
+        end
+        inst._charslot_force_shield = nil
     end)
 end)
 
