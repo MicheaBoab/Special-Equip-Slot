@@ -30,6 +30,10 @@ local CHAR_ITEMS_BY_CHARACTER = {
     waxwell = {
         "waxwelljournal",
     },
+    wanda = {
+        "pocketwatch_heal",
+        "pocketwatch_warp",
+    },
 }
 
 -- Flat list and lookup set (built from the mapping)
@@ -220,6 +224,15 @@ AddModRPCHandler(modname, "CharSlotLift", function(player)
     player.components.locomotor:PushAction(act, true)
 end)
 
+-- Pocketwatch use (CAST_POCKETWATCH on self)
+AddModRPCHandler(modname, "CharSlotCastPocketwatch", function(player)
+    if player == nil or not player:IsValid() then return end
+    local item = player.components.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
+    if item == nil or item.components.pocketwatch == nil then return end
+    local act = GLOBAL.BufferedAction(player, player, GLOBAL.ACTIONS.CAST_POCKETWATCH, item)
+    player.components.locomotor:PushAction(act, true)
+end)
+
 ---------------------------------------------------------------------------
 -- Hotkey "Z" — use CHAR-slot item (block / toss / lift depending on item)
 -- Hold Shift+Z to lift dumbbell instead of toss
@@ -238,6 +251,12 @@ GLOBAL.TheInput:AddKeyDownHandler(KEY_Z, function()
     end
     local item = player.replica.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
     if item == nil then return end
+
+    -- Pocketwatch (wanda): cast on self
+    if item:HasTag("pocketwatch") then
+        GLOBAL.SendModRPCToServer(GLOBAL.MOD_RPC[modname]["CharSlotCastPocketwatch"])
+        return
+    end
 
     -- Spellbook (waxwelljournal): toggle spell wheel UI only; AOE targeting/casting uses default game controls.
     if item.components.spellbook ~= nil then
