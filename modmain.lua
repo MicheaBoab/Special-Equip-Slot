@@ -27,6 +27,13 @@ local CHAR_ITEMS_BY_CHARACTER = {
         "dumbbell_redgem",
         "dumbbell_bluegem"
     },
+    waxwell = {
+        "waxwelljournal",
+    },
+    wanda = {
+        "pocketwatch_heal",
+        "pocketwatch_warp",
+    },
 }
 
 -- Flat list and lookup set (built from the mapping)
@@ -103,9 +110,10 @@ end)
 for _, prefab in ipairs(CHAR_ITEMS) do
     AddPrefabPostInit(prefab, function(inst)
         if not GLOBAL.TheWorld.ismastersim then return end
-        if inst.components.equippable ~= nil then
-            inst.components.equippable.equipslot = GLOBAL.EQUIPSLOTS.CHAR
+        if inst.components.equippable == nil then
+            inst:AddComponent("equippable")
         end
+        inst.components.equippable.equipslot = GLOBAL.EQUIPSLOTS.CHAR
     end)
 end
 
@@ -216,6 +224,15 @@ AddModRPCHandler(modname, "CharSlotLift", function(player)
     player.components.locomotor:PushAction(act, true)
 end)
 
+-- Pocketwatch use (CAST_POCKETWATCH on self)
+AddModRPCHandler(modname, "CharSlotCastPocketwatch", function(player)
+    if player == nil or not player:IsValid() then return end
+    local item = player.components.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
+    if item == nil or item.components.pocketwatch == nil then return end
+    local act = GLOBAL.BufferedAction(player, player, GLOBAL.ACTIONS.CAST_POCKETWATCH, item)
+    player.components.locomotor:PushAction(act, true)
+end)
+
 ---------------------------------------------------------------------------
 -- Hotkey "Z" — use CHAR-slot item (block / toss / lift depending on item)
 -- Hold Shift+Z to lift dumbbell instead of toss
@@ -234,6 +251,25 @@ GLOBAL.TheInput:AddKeyDownHandler(KEY_Z, function()
     end
     local item = player.replica.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
     if item == nil then return end
+
+    -- Pocketwatch (wanda): cast on self
+    if item:HasTag("pocketwatch") then
+        GLOBAL.SendModRPCToServer(GLOBAL.MOD_RPC[modname]["CharSlotCastPocketwatch"])
+        return
+    end
+
+    -- Spellbook (waxwelljournal): toggle spell wheel UI only; AOE targeting/casting uses default game controls.
+    if item.components.spellbook ~= nil then
+        local hud = player.HUD
+        if hud ~= nil then
+            if hud:GetCurrentOpenSpellBook() == item then
+                hud:CloseSpellWheel()
+            elseif item.components.spellbook:CanBeUsedBy(player) then
+                item.components.spellbook:OpenSpellBook(player)
+            end
+        end
+        return
+    end
 
     -- Shield: instant block (CASTAOE)
     if item.components.aoetargeting ~= nil and item.components.aoetargeting:IsEnabled() then
