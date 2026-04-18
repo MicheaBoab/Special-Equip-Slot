@@ -262,23 +262,28 @@ end)
 ---------------------------------------------------------------------------
 local QueueApplyVisuals
 
+local function StopShieldParryVisual(inst)
+    if inst._charslot_force_shield_task ~= nil then
+        inst._charslot_force_shield_task:Cancel()
+        inst._charslot_force_shield_task = nil
+    end
+    inst._charslot_force_shield = nil
+    if QueueApplyVisuals ~= nil then
+        QueueApplyVisuals(inst)
+    end
+end
+
 local function StartShieldParryVisual(inst, shield)
     if inst == nil or not inst:IsValid() or shield == nil or not shield:IsValid() then
         return
     end
 
     local inventory = inst.components.inventory
-    if inventory == nil then
-        return
-    end
+    if inventory == nil then return end
 
-    if inst.prefab ~= "wathgrithr" then
-        return
-    end
+    if inst.prefab ~= "wathgrithr" then return end
 
-    if inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR) ~= shield then
-        return
-    end
+    if inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR) ~= shield then return end
 
     inst._charslot_force_shield = shield
 
@@ -287,25 +292,31 @@ local function StartShieldParryVisual(inst, shield)
         inst._charslot_force_shield_task = nil
     end
 
+    -- Show shield visuals immediately
     if shield.components.equippable ~= nil then
         local fn = shield.components.equippable.onequipfn
         if fn then fn(shield, inst) end
     end
 
-    local duration_mult =
-        inst.components.skilltreeupdater ~= nil and
-        inst.components.skilltreeupdater:IsActivated("wathgrithr_arsenal_shield_2") and
-        GLOBAL.TUNING.SKILLS.WATHGRITHR.SHIELD_PARRY_DURATION_MULT or
-        1
-
-    local duration = GLOBAL.TUNING.WATHGRITHR_SHIELD_PARRY_DURATION * duration_mult
-    inst._charslot_force_shield_task = inst:DoTaskInTime(duration + GLOBAL.FRAMES, function(inst)
+    -- Poll every frame until the "parrying" stategraph tag disappears.
+    -- Covers all three ways parry can end:
+    --   1. Timer runs out naturally
+    --   2. Player moves before timer (parry cancelled)
+    --   3. Successful parry hit (parry_hit short stun → idle)
+    local function CheckParryEnd(inst)
         inst._charslot_force_shield_task = nil
-        inst._charslot_force_shield = nil
-        if QueueApplyVisuals ~= nil then
-            QueueApplyVisuals(inst)
+        if inst._charslot_force_shield == nil then return end
+        if inst.sg ~= nil and inst.sg:HasStateTag("parrying") then
+            -- Still parrying: check again next frame
+            inst._charslot_force_shield_task = inst:DoTaskInTime(GLOBAL.FRAMES, CheckParryEnd)
+        else
+            -- Parry ended: restore normal hand/char priority visuals immediately
+            StopShieldParryVisual(inst)
         end
-    end)
+    end
+
+    -- Wait a few frames for stategraph to enter parry_pre and set the "parrying" tag
+    inst._charslot_force_shield_task = inst:DoTaskInTime(4 * GLOBAL.FRAMES, CheckParryEnd)
 end
 
 local function ApplyVisuals(inst)
