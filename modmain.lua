@@ -27,6 +27,12 @@ local CHAR_ITEMS_BY_CHARACTER = {
         "dumbbell_redgem",
         "dumbbell_bluegem"
     },
+    waxwell = {
+        "waxwelljournal",
+    },
+    wendy = {
+        "abigail_flower",
+    },
 }
 
 -- Flat list and lookup set (built from the mapping)
@@ -103,9 +109,10 @@ end)
 for _, prefab in ipairs(CHAR_ITEMS) do
     AddPrefabPostInit(prefab, function(inst)
         if not GLOBAL.TheWorld.ismastersim then return end
-        if inst.components.equippable ~= nil then
-            inst.components.equippable.equipslot = GLOBAL.EQUIPSLOTS.CHAR
+        if inst.components.equippable == nil then
+            inst:AddComponent("equippable")
         end
+        inst.components.equippable.equipslot = GLOBAL.EQUIPSLOTS.CHAR
     end)
 end
 
@@ -216,6 +223,16 @@ AddModRPCHandler(modname, "CharSlotLift", function(player)
     player.components.locomotor:PushAction(act, true)
 end)
 
+-- Abigail flower summon (CASTSUMMON)
+AddModRPCHandler(modname, "CharSlotSummonAbigail", function(player)
+    if player == nil or not player:IsValid() then return end
+    if player:HasTag("ghostfriend_summoned") then return end
+    local item = player.components.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
+    if item == nil or not item:HasTag("abigail_flower") or item.components.summoningitem == nil then return end
+    local act = GLOBAL.BufferedAction(player, nil, GLOBAL.ACTIONS.CASTSUMMON, item)
+    player.components.locomotor:PushAction(act, true)
+end)
+
 ---------------------------------------------------------------------------
 -- Hotkey "Z" — use CHAR-slot item (block / toss / lift depending on item)
 -- Hold Shift+Z to lift dumbbell instead of toss
@@ -234,6 +251,43 @@ GLOBAL.TheInput:AddKeyDownHandler(KEY_Z, function()
     end
     local item = player.replica.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
     if item == nil then return end
+
+    -- Wendy's Abigail flower:
+    -- - If Abigail is not summoned, Z summons her.
+    -- - If Abigail is summoned, keep the original flower spellbook behavior.
+    if item:HasTag("abigail_flower") then
+        if not player:HasTag("ghostfriend_summoned") then
+            GLOBAL.SendModRPCToServer(GLOBAL.MOD_RPC[modname]["CharSlotSummonAbigail"])
+            return
+        end
+
+        if item.components.spellbook ~= nil then
+            local hud = player.HUD
+            if hud ~= nil then
+                if hud:GetCurrentOpenSpellBook() == item then
+                    hud:CloseSpellWheel()
+                elseif item.components.spellbook:CanBeUsedBy(player) then
+                    item.components.spellbook:OpenSpellBook(player)
+                end
+            end
+            return
+        end
+
+        return
+    end
+
+    -- Spellbook (e.g. waxwelljournal): toggle spell wheel UI only.
+    if item.components.spellbook ~= nil then
+        local hud = player.HUD
+        if hud ~= nil then
+            if hud:GetCurrentOpenSpellBook() == item then
+                hud:CloseSpellWheel()
+            elseif item.components.spellbook:CanBeUsedBy(player) then
+                item.components.spellbook:OpenSpellBook(player)
+            end
+        end
+        return
+    end
 
     -- Shield: instant block (CASTAOE)
     if item.components.aoetargeting ~= nil and item.components.aoetargeting:IsEnabled() then
