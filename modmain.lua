@@ -30,6 +30,10 @@ local CHAR_ITEMS_BY_CHARACTER = {
     waxwell = {
         "waxwelljournal",
     },
+    wanda = {
+        "pocketwatch_heal",
+        "pocketwatch_warp",
+    },
     wendy = {
         "abigail_flower",
     },
@@ -233,6 +237,15 @@ AddModRPCHandler(modname, "CharSlotSummonAbigail", function(player)
     player.components.locomotor:PushAction(act, true)
 end)
 
+-- Wanda pocketwatch use (CAST_POCKETWATCH on self)
+AddModRPCHandler(modname, "CharSlotCastPocketwatch", function(player)
+    if player == nil or not player:IsValid() then return end
+    local item = player.components.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
+    if item == nil or item.components.pocketwatch == nil then return end
+    local act = GLOBAL.BufferedAction(player, player, GLOBAL.ACTIONS.CAST_POCKETWATCH, item)
+    player.components.locomotor:PushAction(act, true)
+end)
+
 ---------------------------------------------------------------------------
 -- Hotkey "Z" — use CHAR-slot item (block / toss / lift depending on item)
 -- Hold Shift+Z to lift dumbbell instead of toss
@@ -273,6 +286,12 @@ GLOBAL.TheInput:AddKeyDownHandler(KEY_Z, function()
             return
         end
 
+        return
+    end
+
+    -- Wanda pocketwatch: use on self
+    if item:HasTag("pocketwatch") then
+        GLOBAL.SendModRPCToServer(GLOBAL.MOD_RPC[modname]["CharSlotCastPocketwatch"])
         return
     end
 
