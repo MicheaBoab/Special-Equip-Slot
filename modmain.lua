@@ -18,6 +18,9 @@ local CHAR_ITEMS_BY_CHARACTER = {
     wathgrithr = {
         "wathgrithr_shield",
     },
+    wendy = {
+        "abigail_flower",
+    },
     wolfgang = {
         "dumbbell",
         "dumbbell_golden",
@@ -233,6 +236,18 @@ AddModRPCHandler(modname, "CharSlotCastPocketwatch", function(player)
     player.components.locomotor:PushAction(act, true)
 end)
 
+-- Abigail flower summon (CASTSUMMON)
+AddModRPCHandler(modname, "CharSlotCastSummon", function(player)
+    if player == nil or not player:IsValid() then return end
+    if not player:HasTag("ghostfriend_notsummoned") then return end
+
+    local item = player.components.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
+    if item == nil or item.components.summoningitem == nil then return end
+
+    local act = GLOBAL.BufferedAction(player, nil, GLOBAL.ACTIONS.CASTSUMMON, item)
+    player.components.locomotor:PushAction(act, true)
+end)
+
 ---------------------------------------------------------------------------
 -- Hotkey "Z" — use CHAR-slot item (block / toss / lift depending on item)
 -- Hold Shift+Z to lift dumbbell instead of toss
@@ -255,6 +270,26 @@ GLOBAL.TheInput:AddKeyDownHandler(KEY_Z, function()
     -- Pocketwatch (wanda): cast on self
     if item:HasTag("pocketwatch") then
         GLOBAL.SendModRPCToServer(GLOBAL.MOD_RPC[modname]["CharSlotCastPocketwatch"])
+        return
+    end
+
+    -- Abigail flower (wendy): if Abigail is not summoned, summon first; otherwise open the spell wheel.
+    if item:HasTag("abigail_flower") then
+        if player:HasTag("ghostfriend_notsummoned") then
+            GLOBAL.SendModRPCToServer(GLOBAL.MOD_RPC[modname]["CharSlotCastSummon"])
+            return
+        end
+
+        if item.components.spellbook ~= nil then
+            local hud = player.HUD
+            if hud ~= nil then
+                if hud:GetCurrentOpenSpellBook() == item then
+                    hud:CloseSpellWheel()
+                elseif item.components.spellbook:CanBeUsedBy(player) then
+                    item.components.spellbook:OpenSpellBook(player)
+                end
+            end
+        end
         return
     end
 
@@ -388,6 +423,18 @@ local function ApplyVisuals(inst)
     end
 end
 
+-- Dumbbells update tossability on "onputininventory" in vanilla.
+-- Re-fire that refresh for CHAR-slot dumbbells because vanilla only tracks HANDS equip flow.
+local function RefreshCharDumbbellState(inst)
+    local inventory = inst.components.inventory
+    if inventory == nil then return end
+
+    local charitem = inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
+    if charitem ~= nil and charitem:HasTag("dumbbell") then
+        charitem:PushEvent("onputininventory", inst)
+    end
+end
+
 QueueApplyVisuals = function(inst)
     if inst._charslot_visual_task0 ~= nil then
         inst._charslot_visual_task0:Cancel()
@@ -420,11 +467,16 @@ AddPlayerPostInit(function(inst)
     local function OnEquipChanged(inst, data)
         if data ~= nil and (data.eslot == GLOBAL.EQUIPSLOTS.HANDS or data.eslot == GLOBAL.EQUIPSLOTS.CHAR) then
             QueueApplyVisuals(inst)
+            if data.eslot == GLOBAL.EQUIPSLOTS.CHAR then
+                -- Defer one tick to ensure equipped item state is fully updated first.
+                inst:DoTaskInTime(0, RefreshCharDumbbellState)
+            end
         end
     end
 
     inst:ListenForEvent("equip", OnEquipChanged)
     inst:ListenForEvent("unequip", OnEquipChanged)
+    inst:ListenForEvent("mightiness_statechange", RefreshCharDumbbellState)
 
     inst:ListenForEvent("onremove", function(inst)
         if inst._charslot_visual_task0 ~= nil then
