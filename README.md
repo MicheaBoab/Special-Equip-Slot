@@ -20,14 +20,7 @@
 
 ### 大力士（Wolfgang）
 
-- 哑铃系列：
-  - dumbbell
-  - dumbbell_golden
-  - dumbbell_marble
-  - dumbbell_gem
-  - dumbbell_heat
-  - dumbbell_redgem
-  - dumbbell_bluegem
+- 全哑铃系列：
 - Z：朝鼠标位置投掷哑铃（与原版一致，仍受大力状态等原版条件限制）
 - Shift + Z：举哑铃健身
 
@@ -46,8 +39,8 @@
 ### 旺达（Wanda）
 
 - 怀表：
-  - pocketwatch_heal
-  - pocketwatch_warp
+  - 不老表
+  - 倒走表
 - Z：对自身施放怀表技能
 
 ## 按键说明
@@ -68,15 +61,6 @@
   - 使用自定义 RPC 在服务端执行关键动作，避免纯客户端触发导致不同步
 - 安全限制：
   - 非白名单道具不能装备进 CHAR 栏位，防止泛化成“万能额外装备栏”
-
-## 安装与兼容
-
-- 适用版本：DST（api_version = 10）
-- 安装方式：服务器与所有客户端都需要安装（all_clients_require_mod = true）
-- 可能冲突：
-  - 修改装备栏数量/布局的模组
-  - 重写按键输入（尤其是 Z 键）的模组
-  - 修改角色专属道具组件行为的模组
 
 ## 已知限制
 
