@@ -37,9 +37,6 @@ local CHAR_ITEMS_BY_CHARACTER = {
         "pocketwatch_heal",
         "pocketwatch_warp",
     },
-    wendy = {
-        "abigail_flower",
-    },
 }
 
 -- Flat list and lookup set (built from the mapping)
@@ -230,22 +227,24 @@ AddModRPCHandler(modname, "CharSlotLift", function(player)
     player.components.locomotor:PushAction(act, true)
 end)
 
--- Abigail flower summon (CASTSUMMON)
-AddModRPCHandler(modname, "CharSlotSummonAbigail", function(player)
-    if player == nil or not player:IsValid() then return end
-    if player:HasTag("ghostfriend_summoned") then return end
-    local item = player.components.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
-    if item == nil or not item:HasTag("abigail_flower") or item.components.summoningitem == nil then return end
-    local act = GLOBAL.BufferedAction(player, nil, GLOBAL.ACTIONS.CASTSUMMON, item)
-    player.components.locomotor:PushAction(act, true)
-end)
-
--- Wanda pocketwatch use (CAST_POCKETWATCH on self)
+-- Pocketwatch use (CAST_POCKETWATCH on self)
 AddModRPCHandler(modname, "CharSlotCastPocketwatch", function(player)
     if player == nil or not player:IsValid() then return end
     local item = player.components.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
     if item == nil or item.components.pocketwatch == nil then return end
     local act = GLOBAL.BufferedAction(player, player, GLOBAL.ACTIONS.CAST_POCKETWATCH, item)
+    player.components.locomotor:PushAction(act, true)
+end)
+
+-- Abigail flower summon (CASTSUMMON)
+AddModRPCHandler(modname, "CharSlotCastSummon", function(player)
+    if player == nil or not player:IsValid() then return end
+    if not player:HasTag("ghostfriend_notsummoned") then return end
+
+    local item = player.components.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
+    if item == nil or item.components.summoningitem == nil then return end
+
+    local act = GLOBAL.BufferedAction(player, nil, GLOBAL.ACTIONS.CASTSUMMON, item)
     player.components.locomotor:PushAction(act, true)
 end)
 
@@ -268,12 +267,16 @@ GLOBAL.TheInput:AddKeyDownHandler(KEY_Z, function()
     local item = player.replica.inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
     if item == nil then return end
 
-    -- Wendy's Abigail flower:
-    -- - If Abigail is not summoned, Z summons her.
-    -- - If Abigail is summoned, keep the original flower spellbook behavior.
+    -- Pocketwatch (wanda): cast on self
+    if item:HasTag("pocketwatch") then
+        GLOBAL.SendModRPCToServer(GLOBAL.MOD_RPC[modname]["CharSlotCastPocketwatch"])
+        return
+    end
+
+    -- Abigail flower (wendy): if Abigail is not summoned, summon first; otherwise open the spell wheel.
     if item:HasTag("abigail_flower") then
-        if not player:HasTag("ghostfriend_summoned") then
-            GLOBAL.SendModRPCToServer(GLOBAL.MOD_RPC[modname]["CharSlotSummonAbigail"])
+        if player:HasTag("ghostfriend_notsummoned") then
+            GLOBAL.SendModRPCToServer(GLOBAL.MOD_RPC[modname]["CharSlotCastSummon"])
             return
         end
 
@@ -286,19 +289,11 @@ GLOBAL.TheInput:AddKeyDownHandler(KEY_Z, function()
                     item.components.spellbook:OpenSpellBook(player)
                 end
             end
-            return
         end
-
         return
     end
 
-    -- Wanda pocketwatch: use on self
-    if item:HasTag("pocketwatch") then
-        GLOBAL.SendModRPCToServer(GLOBAL.MOD_RPC[modname]["CharSlotCastPocketwatch"])
-        return
-    end
-
-    -- Spellbook (e.g. waxwelljournal): toggle spell wheel UI only.
+    -- Spellbook (waxwelljournal): toggle spell wheel UI only; AOE targeting/casting uses default game controls.
     if item.components.spellbook ~= nil then
         local hud = player.HUD
         if hud ~= nil then
