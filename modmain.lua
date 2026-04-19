@@ -18,6 +18,9 @@ local CHAR_ITEMS_BY_CHARACTER = {
     wathgrithr = {
         "wathgrithr_shield",
     },
+    wendy = {
+        "abigail_flower",
+    },
     wolfgang = {
         "dumbbell",
         "dumbbell_golden",
@@ -425,6 +428,18 @@ local function ApplyVisuals(inst)
     end
 end
 
+-- Dumbbells update tossability on "onputininventory" in vanilla.
+-- Re-fire that refresh for CHAR-slot dumbbells because vanilla only tracks HANDS equip flow.
+local function RefreshCharDumbbellState(inst)
+    local inventory = inst.components.inventory
+    if inventory == nil then return end
+
+    local charitem = inventory:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
+    if charitem ~= nil and charitem:HasTag("dumbbell") then
+        charitem:PushEvent("onputininventory", inst)
+    end
+end
+
 QueueApplyVisuals = function(inst)
     if inst._charslot_visual_task0 ~= nil then
         inst._charslot_visual_task0:Cancel()
@@ -457,11 +472,16 @@ AddPlayerPostInit(function(inst)
     local function OnEquipChanged(inst, data)
         if data ~= nil and (data.eslot == GLOBAL.EQUIPSLOTS.HANDS or data.eslot == GLOBAL.EQUIPSLOTS.CHAR) then
             QueueApplyVisuals(inst)
+            if data.eslot == GLOBAL.EQUIPSLOTS.CHAR then
+                -- Defer one tick to ensure equipped item state is fully updated first.
+                inst:DoTaskInTime(0, RefreshCharDumbbellState)
+            end
         end
     end
 
     inst:ListenForEvent("equip", OnEquipChanged)
     inst:ListenForEvent("unequip", OnEquipChanged)
+    inst:ListenForEvent("mightiness_statechange", RefreshCharDumbbellState)
 
     inst:ListenForEvent("onremove", function(inst)
         if inst._charslot_visual_task0 ~= nil then
