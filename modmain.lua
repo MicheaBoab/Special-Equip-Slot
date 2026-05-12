@@ -102,7 +102,7 @@ end)
 
 ---------------------------------------------------------------------------
 -- Wendy elixir fix: allow lookup of abigail_flower in CHAR slot.
--- 旺达 elixir 修复：允许在 CHAR 槽中查找阿比盖尔之花。
+-- 温蒂 elixir 修复：允许在 CHAR 槽中查找阿比盖尔之花。
 -- Original logic: inventory:FindItem() only checks backpack, not equip slots.
 -- 原始逻辑：inventory:FindItem() 仅检查背包，不检查装备槽。
 ---------------------------------------------------------------------------
