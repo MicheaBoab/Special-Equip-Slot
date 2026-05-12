@@ -100,6 +100,34 @@ AddComponentAction("INVENTORY", "equippable", function(inst, doer, actions)
     end
 end)
 
+---------------------------------------------------------------------------
+-- Wendy elixir fix: allow lookup of abigail_flower in CHAR slot.
+-- 旺达 elixir 修复：允许在 CHAR 槽中查找阿比盖尔之花。
+-- Original logic: inventory:FindItem() only checks backpack, not equip slots.
+-- 原始逻辑：inventory:FindItem() 仅检查背包，不检查装备槽。
+---------------------------------------------------------------------------
+AddPrefabPostInit("wendy", function(inst)
+    if not GLOBAL.TheWorld.ismastersim then return end
+
+    inst:DoTaskInTime(0, function(inst)
+        if inst.components.inventory == nil then return end
+
+        local _FindItem = inst.components.inventory.FindItem
+        inst.components.inventory.FindItem = function(self, fn)
+            local result = _FindItem(self, fn)
+            if result == nil then
+                -- If not found in backpack, check CHAR slot for ghostlyelixirable items.
+                -- 如果在背包中未找到，则检查 CHAR 槽位中的 ghostlyelixirable 物品。
+                local charitem = self:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
+                if charitem ~= nil and fn(charitem) then
+                    return charitem
+                end
+            end
+            return result
+        end
+    end)
+end)
+
 -- Whether this character should show CHAR slot.
 -- 判断该角色是否应显示 CHAR 槽位。
 local function CharacterHasSlot(prefab)
