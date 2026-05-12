@@ -51,6 +51,55 @@ for _, items in pairs(CHAR_ITEMS_BY_CHARACTER) do
     end
 end
 
+local WANDA_WATCH_ALLOWED = {}
+for _, name in ipairs(CHAR_ITEMS_BY_CHARACTER.wanda or {}) do
+    WANDA_WATCH_ALLOWED[name] = true
+end
+
+local function RemoveAction(actions, action)
+    for i = #actions, 1, -1 do
+        if actions[i] == action or (actions[i] ~= nil and actions[i].id == action.id) then
+            table.remove(actions, i)
+        end
+    end
+end
+
+local function HasAction(actions, action)
+    for i = 1, #actions do
+        if actions[i] == action or (actions[i] ~= nil and actions[i].id == action.id) then
+            return true
+        end
+    end
+    return false
+end
+
+---------------------------------------------------------------------------
+-- Wanda pocketwatch RMB policy:
+-- keep item equippable to CHAR, but RMB from inventory uses watch instead.
+-- 旺达怀表右键策略：保留可装备到 CHAR；背包内右键优先“使用”而非“装备”。
+---------------------------------------------------------------------------
+AddComponentAction("INVENTORY", "equippable", function(inst, doer, actions)
+    if inst == nil or doer == nil then
+        return
+    end
+    if doer.prefab ~= "wanda" then
+        return
+    end
+    if not WANDA_WATCH_ALLOWED[inst.prefab] then
+        return
+    end
+
+    -- Remove RMB equip entry, then ensure watch-cast action is present.
+    local equip_action = GLOBAL.ACTIONS.EQUIP
+    local cast_action = GLOBAL.ACTIONS.CAST_POCKETWATCH
+    if equip_action ~= nil then
+        RemoveAction(actions, equip_action)
+    end
+    if cast_action ~= nil and not HasAction(actions, cast_action) then
+        table.insert(actions, cast_action)
+    end
+end)
+
 -- Whether this character should show CHAR slot.
 -- 判断该角色是否应显示 CHAR 槽位。
 local function CharacterHasSlot(prefab)
