@@ -113,17 +113,18 @@ AddPrefabPostInit("wendy", function(inst)
         if inst.components.inventory == nil then return end
 
         local _FindItem = inst.components.inventory.FindItem
-        inst.components.inventory.FindItem = function(self, fn)
-            local result = _FindItem(self, fn)
+        inst.components.inventory.FindItem = function(self, fn, ...)
+            local result, ...
+            result, ... = _FindItem(self, fn, ...)
             if result == nil then
                 -- If not found in backpack, check CHAR slot for ghostlyelixirable items.
                 -- 如果在背包中未找到，则检查 CHAR 槽位中的 ghostlyelixirable 物品。
                 local charitem = self:GetEquippedItem(GLOBAL.EQUIPSLOTS.CHAR)
                 if charitem ~= nil and fn(charitem) then
-                    return charitem
+                    return charitem, ...
                 end
             end
-            return result
+            return result, ...
         end
     end)
 end)
