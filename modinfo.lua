@@ -1,7 +1,7 @@
 name = "Character Item Slot"
 description = "Adds one extra equip slot for character-specific items."
 author = "MicheaBoab"
-version = "1.2.0"
+version = "1.2.1"
 
 forumthread = ""
 api_version = 10
